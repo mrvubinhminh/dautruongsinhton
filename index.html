@@ -418,11 +418,19 @@
         <!-- Bảng Xếp Hạng -->
         <div class="lg:col-span-3 mt-4">
           <div class="bg-slate-900 rounded-2xl shadow-xl border border-slate-800 overflow-hidden">
-            <div class="p-4 bg-slate-950 border-b border-slate-800">
+            <!-- Thanh tiêu đề kèm bộ lọc -->
+            <div class="p-4 bg-slate-950 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <h3 class="text-white font-black uppercase tracking-widest flex items-center text-sm">
                 <i data-lucide="list-ordered" class="w-4 h-4 mr-2 text-amber-500"></i> Hồ sơ sinh tồn
               </h3>
+              <div class="flex items-center space-x-2">
+                <i data-lucide="filter" class="w-4 h-4 text-slate-500"></i>
+                <select id="filterExamCode" class="bg-slate-900 text-amber-500 font-mono text-xs px-3 py-1.5 rounded-lg border border-slate-700 outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer shadow-inner uppercase tracking-wider">
+                  <option value="ALL">TẤT CẢ MÃ ĐỀ</option>
+                </select>
+              </div>
             </div>
+            
             <div class="overflow-x-auto">
               <table class="w-full text-left border-collapse">
                 <thead>
@@ -512,6 +520,7 @@
     // Teacher State
     let leaderboardData = [];
     let unsubscribeLeaderboard = null;
+    let currentFilterCode = 'ALL'; // Trạng thái bộ lọc
 
     // 3. TIỆN ÍCH
     const $ = (id) => document.getElementById(id);
@@ -1049,6 +1058,12 @@ Chỉ in ra bảng, không giải thích.`;
       }, 2000);
     };
 
+    // --- SỰ KIỆN LỌC BẢNG XẾP HẠNG ---
+    $('filterExamCode').onchange = (e) => {
+        currentFilterCode = e.target.value;
+        drawLeaderboard();
+    };
+
     function fetchLeaderboard() {
       if(unsubscribeLeaderboard) unsubscribeLeaderboard();
       const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'exam_results');
@@ -1066,11 +1081,40 @@ Chỉ in ra bảng, không giải thích.`;
     }
 
     function drawLeaderboard() {
+      // 1. Cập nhật danh sách bộ lọc mã đề tự động
+      const filterEl = $('filterExamCode');
+      const uniqueCodes = [...new Set(leaderboardData.map(d => d.examCode || 'DEMO'))];
+      
+      let optionsHTML = `<option value="ALL">TẤT CẢ MÃ ĐỀ</option>`;
+      uniqueCodes.forEach(code => {
+         optionsHTML += `<option value="${code}">${code}</option>`;
+      });
+      
+      // Tránh ghi đè gây mất focus nếu danh sách không đổi
+      if (filterEl.innerHTML.replace(/\s+/g, '') !== optionsHTML.replace(/\s+/g, '')) {
+          const currentVal = filterEl.value;
+          filterEl.innerHTML = optionsHTML;
+          // Giữ nguyên lựa chọn cũ nếu mã đó vẫn tồn tại, ngược lại reset về ALL
+          if (uniqueCodes.includes(currentVal) || currentVal === 'ALL') {
+              filterEl.value = currentVal;
+          } else {
+              filterEl.value = 'ALL';
+              currentFilterCode = 'ALL';
+          }
+      }
+
+      // 2. Lọc dữ liệu dựa trên mã đã chọn
+      let displayData = leaderboardData;
+      if (currentFilterCode !== 'ALL') {
+          displayData = displayData.filter(d => (d.examCode || 'DEMO') === currentFilterCode);
+      }
+
+      // 3. Render bảng
       let html = '';
-      if(leaderboardData.length === 0) {
-        html = `<tr><td colspan="5" class="p-8 text-center text-slate-500 font-medium"><i data-lucide="radar" class="w-8 h-8 mx-auto mb-3 animate-pulse opacity-50"></i><p>Chưa có dữ liệu sinh tồn...</p></td></tr>`;
+      if(displayData.length === 0) {
+        html = `<tr><td colspan="5" class="p-8 text-center text-slate-500 font-medium"><i data-lucide="radar" class="w-8 h-8 mx-auto mb-3 animate-pulse opacity-50"></i><p>Chưa có dữ liệu sinh tồn cho lựa chọn này...</p></td></tr>`;
       } else {
-        leaderboardData.forEach((st, i) => {
+        displayData.forEach((st, i) => {
           let rClass = "text-slate-500 bg-slate-800";
           if(i===0 && st.isSurvived) rClass="bg-yellow-500/20 text-yellow-500 border border-yellow-500/50";
           else if(i===1 && st.isSurvived) rClass="bg-slate-300/20 text-slate-300 border border-slate-300/50";
