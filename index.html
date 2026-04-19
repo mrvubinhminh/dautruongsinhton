@@ -68,8 +68,8 @@
 
   <!-- Loading Overlay -->
   <div id="loadingOverlay" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[100] hidden flex-col items-center justify-center">
-    <div class="bg-slate-900 border border-amber-700 p-8 rounded-2xl flex flex-col items-center shadow-[0_0_50px_rgba(245,158,11,0.2)]">
-      <i data-lucide="swords" class="w-12 h-12 text-amber-500 animate-pulse mb-4"></i>
+    <div class="bg-slate-900 border border-amber-700 p-8 rounded-2xl flex flex-col items-center shadow-[0_0_50px_rgba(245,158,11,0.2)] text-center">
+      <i data-lucide="swords" class="w-12 h-12 text-amber-500 animate-pulse mb-4 mx-auto"></i>
       <p id="loadingText" class="text-lg font-black text-amber-500 tracking-widest uppercase">Đang mở cổng đấu trường...</p>
     </div>
   </div>
@@ -857,7 +857,7 @@
 
     // 7. SUBMIT & RESULT
     async function submitExam(isSurvived) {
-      showLoading("Đang tổng hợp thành tích...");
+      showLoading("Đang ghi nhận kết quả và đồng bộ...");
       $('bgMusic').pause();
 
       // Đếm số câu đúng thực tế từ mảng answersArr
@@ -883,11 +883,13 @@
         heartsRemaining: hearts
       };
 
-      // Push to Apps Script
-      try {
-        const url = `${DEFAULT_SCRIPT_URL}?studentName=${encodeURIComponent(studentNameStr)}&examCode=${encodeURIComponent(usedCode)}&score=${correctCount}&total=${activeQuizData.length}&timeSpent=${timeSpent}`;
-        fetch(url, { mode: 'no-cors' }).catch(e=>console.log(e));
-      } catch (e) {}
+      // Đẩy dữ liệu sang Google Sheets (Chạy ngầm không đợi, tránh lag UI)
+      setTimeout(() => {
+        try {
+          const url = `${DEFAULT_SCRIPT_URL}?studentName=${encodeURIComponent(studentNameStr)}&examCode=${encodeURIComponent(usedCode)}&score=${correctCount}&total=${activeQuizData.length}&timeSpent=${timeSpent}`;
+          fetch(url, { mode: 'no-cors' }).catch(e=>console.log(e));
+        } catch (e) {}
+      }, 10);
 
       // Push to Firebase and calculate rank
       if (currentUser) {
@@ -895,6 +897,13 @@
           const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'exam_results');
           const docRef = await addDoc(colRef, { ...resultObj, userId: currentUser.uid, createdAt: serverTimestamp() });
           
+          // Tạo đếm ngược 5 giây chờ hệ thống đồng bộ để tránh lag và đảm bảo tải đúng thứ hạng
+          for (let wait = 5; wait > 0; wait--) {
+            showLoading(`Đang tính toán thứ hạng sinh tồn... ${wait}s`);
+            await new Promise(r => setTimeout(r, 1000));
+          }
+          showLoading("Đang mở bảng vàng...");
+
           const snap = await getDocs(colRef);
           let allData = snap.docs.map(d => ({id: d.id, ...d.data()}));
           if(!allData.find(d => d.id === docRef.id)) allData.push({id: docRef.id, ...resultObj});
